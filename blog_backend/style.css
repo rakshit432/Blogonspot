@@ -1,0 +1,40 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  
+  section {
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  
+  input, textarea, button {
+    display: block;
+    margin: 5px 0;
+    padding: 8px;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  button {
+    background: #007bff;
+    border: none;
+    color: white;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background: #0056b3;
+  }
+  
+  #posts-container {
+    margin-top: 10px;
+  }
+  
+  .post {
+    border: 1px solid #aaa;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  

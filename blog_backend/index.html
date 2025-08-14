@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blog API Test</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <h1>Blog API Test</h1>
+
+  <!-- Auth Section -->
+  <section>
+    <h2>Signup</h2>
+    <input type="text" id="signup-username" placeholder="Username"/>
+    <input type="email" id="signup-email" placeholder="Email"/>
+    <input type="password" id="signup-password" placeholder="Password"/>
+    <button onclick="signup()">Sign Up</button>
+  </section>
+
+  <section>
+    <h2>Login</h2>
+    <input type="email" id="login-email" placeholder="Email"/>
+    <input type="password" id="login-password" placeholder="Password"/>
+    <button onclick="login()">Login</button>
+  </section>
+
+  <!-- Post Creation -->
+  <section>
+    <h2>Create Post</h2>
+    <input type="text" id="post-title" placeholder="Title"/>
+    <textarea id="post-content" placeholder="Content"></textarea>
+    <label>
+      <input type="checkbox" id="post-isPublic" checked/> Public Post
+    </label>
+    <button onclick="createPost()">Create Post</button>
+  </section>
+
+  <!-- View Posts -->
+  <section>
+    <h2>Posts</h2>
+    <button onclick="getPosts()">Fetch Posts</button>
+    <div id="posts-container"></div>
+  </section>
+
+  <!-- Subscription -->
+  <section>
+    <h2>Subscribe</h2>
+    <input type="text" id="creator-id" placeholder="Creator User ID"/>
+    <button onclick="subscribe()">Subscribe</button>
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
