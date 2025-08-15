@@ -13,7 +13,7 @@ const app = express();
 
 // CORS: allow frontend origin(s)
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-const FALLBACKS = ["http://localhost:5174", "http://127.0.0.1:5173", "http://localhost:3000"];
+const FALLBACKS = ["http://localhost:5174", "https://blogonspot.vercel.app", "http://localhost:3000"];
 const ALLOWED_ORIGINS = Array.from(new Set([FRONTEND_URL, ...FALLBACKS]));
 
 app.use(
