@@ -140,6 +140,20 @@ router.put("/edit/:id", userAuth("user"), async (req, res) => {
     }
 });
 
+router.get("/post", async (req, res) => {
+    try {
+        const filter = {};
+        if (req.query.ispublic) {
+            filter.isPublic = req.query.ispublic === "true";
+        }
+        const posts = await Blogs.find(filter).populate("author", "username");
+        res.json(posts);
+    } catch (err) {
+        console.error("Get posts error:", err);
+        res.status(500).json({ error: "Failed to fetch posts" });
+    }
+});
+
 // ---------------- Create a blog post (authenticated user) ----------------
 router.post("/post", userAuth("user"), async (req, res) => {
     try {
@@ -200,7 +214,7 @@ router.post("/like/:postId", userAuth("user"), async (req, res) => {
 
         // Prevent duplicate likes by the same user
         if (post.likes && post.likes.some(like => like.toString() === req.user._id.toString())) {
-            return res.status(400).json({ error: "You have already liked this post" });
+            return res.status(200).json({ message: "Already liked", post });
         }
 
         post.likes.push(req.user._id);
@@ -210,6 +224,62 @@ router.post("/like/:postId", userAuth("user"), async (req, res) => {
     } catch (err) {
         console.error("Add like error:", err);
         res.status(500).json({ error: "Could not like post" });
+    }
+});
+
+// ---------------- Unlike a post (authenticated) ----------------
+router.delete("/like/:postId", userAuth("user"), async (req, res) => {
+    try {
+        const post = await Blogs.findById(req.params.postId);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+
+        const before = post.likes.length;
+        post.likes = post.likes.filter(like => like.toString() !== req.user._id.toString());
+        const after = post.likes.length;
+        if (before === after) {
+            return res.status(200).json({ message: "Not liked", post });
+        }
+
+        await post.save();
+        res.status(200).json({ message: "Like removed", post });
+    } catch (err) {
+        console.error("Remove like error:", err);
+        res.status(500).json({ error: "Could not unlike post" });
+    }
+});
+
+// ---- Aliases to support fallback frontend paths ----
+router.post("/posts/:postId/like", userAuth("user"), async (req, res) => {
+    try {
+        const post = await Blogs.findById(req.params.postId);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+        if (post.likes && post.likes.some(like => like.toString() === req.user._id.toString())) {
+            return res.status(200).json({ message: "Already liked", post });
+        }
+        post.likes.push(req.user._id);
+        await post.save();
+        res.status(200).json({ message: "Like added", post });
+    } catch (err) {
+        console.error("Add like (alias) error:", err);
+        res.status(500).json({ error: "Could not like post" });
+    }
+});
+
+router.delete("/posts/:postId/like", userAuth("user"), async (req, res) => {
+    try {
+        const post = await Blogs.findById(req.params.postId);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+        const before = post.likes.length;
+        post.likes = post.likes.filter(like => like.toString() !== req.user._id.toString());
+        const after = post.likes.length;
+        if (before === after) {
+            return res.status(200).json({ message: "Not liked", post });
+        }
+        await post.save();
+        res.status(200).json({ message: "Like removed", post });
+    } catch (err) {
+        console.error("Remove like (alias) error:", err);
+        res.status(500).json({ error: "Could not unlike post" });
     }
 });
 
@@ -287,6 +357,171 @@ router.post("/unfollow/:targetUserId", userAuth("user"), async (req, res) => {
     } catch (err) {
         console.error("Unfollow error:", err);
         res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------- Bookmarks (add/list/remove) ----------------
+// List bookmarks for the current user
+router.get("/bookmarks", userAuth("user"), async (req, res) => {
+    try {
+        const user = await Users.findById(req.user._id).populate({
+            path: "bookmarks",
+            populate: { path: "author", select: "username avatar" },
+            options: { sort: { createdAt: -1 } }
+        });
+        const posts = user?.bookmarks || [];
+        return res.json({ posts });
+    } catch (err) {
+        console.error("Get bookmarks error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// Alias for list bookmarks
+router.get("/saved", userAuth("user"), async (req, res) => {
+    try {
+        const user = await Users.findById(req.user._id).populate({
+            path: "bookmarks",
+            populate: { path: "author", select: "username avatar" },
+            options: { sort: { createdAt: -1 } }
+        });
+        const posts = user?.bookmarks || [];
+        return res.json({ posts });
+    } catch (err) {
+        console.error("Get saved error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// Add a bookmark
+router.post("/bookmarks/:postId", userAuth("user"), async (req, res) => {
+    try {
+        const { postId } = req.params;
+        const post = await Blogs.findById(postId);
+        if (!post) return res.status(404).json({ message: "Post not found" });
+
+        await Users.findByIdAndUpdate(req.user._id, { $addToSet: { bookmarks: postId } });
+        return res.status(200).json({ message: "Bookmarked" });
+    } catch (err) {
+        console.error("Add bookmark error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// Alias to add a bookmark
+router.post("/bookmark/:postId", userAuth("user"), async (req, res) => {
+    try {
+        const { postId } = req.params;
+        const post = await Blogs.findById(postId);
+        if (!post) return res.status(404).json({ message: "Post not found" });
+
+        await Users.findByIdAndUpdate(req.user._id, { $addToSet: { bookmarks: postId } });
+        return res.status(200).json({ message: "Bookmarked" });
+    } catch (err) {
+        console.error("Add bookmark (alias) error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// Remove a bookmark
+router.delete("/bookmarks/:postId", userAuth("user"), async (req, res) => {
+    try {
+        const { postId } = req.params;
+        await Users.findByIdAndUpdate(req.user._id, { $pull: { bookmarks: postId } });
+        return res.status(200).json({ message: "Bookmark removed" });
+    } catch (err) {
+        console.error("Remove bookmark error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// Alias to remove a bookmark
+router.delete("/bookmark/:postId", userAuth("user"), async (req, res) => {
+    try {
+        const { postId } = req.params;
+        await Users.findByIdAndUpdate(req.user._id, { $pull: { bookmarks: postId } });
+        return res.status(200).json({ message: "Bookmark removed" });
+    } catch (err) {
+        console.error("Remove bookmark (alias) error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// ---------------- Search (posts and users) ----------------
+router.get("/search/posts", async (req, res) => {
+    try {
+        const q = (req.query.q || "").trim();
+        if (!q) return res.json([]);
+        const regex = new RegExp(q, "i");
+        const posts = await Blogs.find({
+            isPublished: true,
+            isPublic: true,
+            $or: [{ title: regex }, { content: regex }, { tags: regex }]
+        })
+        .populate("author", "username avatar")
+        .sort({ createdAt: -1 })
+        .limit(50);
+        return res.json(posts);
+    } catch (err) {
+        console.error("Search posts error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+router.get("/search/users", async (req, res) => {
+    try {
+        const q = (req.query.q || "").trim();
+        if (!q) return res.json([]);
+        const regex = new RegExp(q, "i");
+        const users = await Users.find({
+            isActive: true,
+            $or: [{ username: regex }, { email: regex }]
+        }).select("username avatar creatorBio creatorCategory isVerifiedCreator").limit(50);
+        return res.json(users);
+    } catch (err) {
+        console.error("Search users error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// ---------- Aliases for frontend fallbacks ----------
+// GET /api/user/:id/posts -> list published posts by this author (optionally only public)
+router.get("/:id/posts", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pub = (req.query.public || req.query.ispublic || "").toString();
+        const filter = { author: id, isPublished: true };
+        if (pub === "true") filter.isPublic = true;
+        const posts = await Blogs.find(filter)
+            .populate("author", "username avatar")
+            .sort({ createdAt: -1 });
+        return res.json(posts);
+    } catch (err) {
+        console.error("Alias /:id/posts error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+// GET /api/user/posts -> search posts (alias to /api/user/search/posts)
+// supports: ?search=foo or ?q=foo and optional &public=true
+router.get("/posts", async (req, res) => {
+    try {
+        const q = (req.query.search || req.query.q || "").trim();
+        const pub = (req.query.public || req.query.ispublic || "").toString();
+        const filter = { isPublished: true };
+        if (pub === "true") filter.isPublic = true; else filter.isPublic = true; // default to public
+        if (q) {
+            const regex = new RegExp(q, "i");
+            filter.$or = [{ title: regex }, { content: regex }, { tags: regex }];
+        }
+        const posts = await Blogs.find(filter)
+            .populate("author", "username avatar")
+            .sort({ createdAt: -1 })
+            .limit(50);
+        return res.json(posts);
+    } catch (err) {
+        console.error("Alias /posts error:", err);
+        return res.status(500).json({ message: "Server error", error: err.message });
     }
 });
 

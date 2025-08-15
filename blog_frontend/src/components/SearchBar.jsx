@@ -1,6 +1,5 @@
 // src/components/SearchBar.jsx
 import { useEffect, useRef, useState } from "react";
-import { tryGet } from "../api/axios";
 import { FaSearch } from "react-icons/fa";
 
 const paths = {
@@ -17,7 +16,7 @@ const paths = {
   ],
 };
 
-export default function SearchBar({ onResults }) {
+export default function SearchBar({ onResults, sourcePosts = [], sourceUsers = [] }) {
   const inputRef = useRef(null);
   const [q, setQ] = useState("");
 
@@ -28,14 +27,33 @@ export default function SearchBar({ onResults }) {
   async function doSearch(e) {
     e.preventDefault();
     if (!q.trim()) return;
-    const [postsRes, usersRes] = await Promise.all([
-      tryGet(paths.searchPosts(q)).catch(()=>({ data: [] })),
-      tryGet(paths.searchUsers(q)).catch(()=>({ data: [] })),
-    ]);
-    onResults?.({
-      posts: Array.isArray(postsRes.data) ? postsRes.data : postsRes.data?.posts || [],
-      users: Array.isArray(usersRes.data) ? usersRes.data : usersRes.data?.users || usersRes.data?.creators || [],
+    const query = q.trim().toLowerCase();
+    // Filter posts
+    const posts = (Array.isArray(sourcePosts) ? sourcePosts : []).filter((p) => {
+      const title = (p.title || "").toLowerCase();
+      const content = (p.content || "").toLowerCase();
+      const tags = Array.isArray(p.tags) ? p.tags.join(" ").toLowerCase() : "";
+      return title.includes(query) || content.includes(query) || tags.includes(query);
     });
+    // Build user pool: provided users or authors from posts
+    const providedUsers = Array.isArray(sourceUsers) ? sourceUsers : [];
+    const authorUsers = (Array.isArray(sourcePosts) ? sourcePosts : [])
+      .map((p) => p.author)
+      .filter(Boolean);
+    const pool = [...providedUsers, ...authorUsers];
+    const seen = new Set();
+    const users = pool.filter((u) => {
+      const id = String(u?._id || u?.id || u?.username || Math.random());
+      if (seen.has(id)) return false;
+      const username = (u?.username || "").toLowerCase();
+      const email = (u?.email || "").toLowerCase();
+      const bio = (u?.creatorBio || u?.bio || "").toLowerCase();
+      const ok = username.includes(query) || email.includes(query) || bio.includes(query);
+      if (ok) seen.add(id);
+      return ok;
+    });
+    try { console.log('[Search] client results:', { posts: posts.length, users: users.length }); } catch {}
+    onResults?.({ posts, users });
   }
 
   return (

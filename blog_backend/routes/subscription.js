@@ -6,9 +6,23 @@ const { userAuth } = require("../middlewares/userauth");
 // ---------------- Get all creators (public info) ----------------
 router.get("/creators", async (req, res) => {
     try {
-        const creators = await Users.find({ 
-            isActive: true 
-        }).select("username avatar creatorBio creatorCategory isVerifiedCreator subscribers");
+        // Optional search support: /api/subscription/creators?search=foo (or ?q=foo)
+        const q = (req.query.search || req.query.q || "").trim();
+        const cond = { isActive: true };
+        if (q) {
+            const regex = new RegExp(q, "i");
+            cond.$or = [
+                { username: regex },
+                { email: regex },
+                { creatorCategory: regex },
+                { creatorBio: regex }
+            ];
+        }
+
+        const creators = await Users.find(cond)
+            .select("username avatar creatorBio creatorCategory isVerifiedCreator subscribers")
+            .sort({ since: -1 })
+            .limit(50);
         
         res.json(creators);
     } catch (error) {
@@ -23,52 +37,36 @@ router.post("/subscribe/:creatorId", userAuth("user"), async (req, res) => {
         const subscriberId = req.user._id;
         const creatorId = req.params.creatorId;
 
-        // Check if trying to subscribe to self
+        // Prevent self-subscription
         if (subscriberId.toString() === creatorId) {
             return res.status(400).json({ message: "Cannot subscribe to yourself" });
         }
 
-        // Check if creator exists and is active
+        // Validate creator
         const creator = await Users.findById(creatorId);
         if (!creator || !creator.isActive) {
             return res.status(404).json({ message: "Creator not found or inactive" });
         }
 
-        // Check if already subscribed
-        const existingSubscription = await Subscriptions.findOne({
-            subscriber: subscriberId,
-            creator: creatorId,
-            isActive: true
-        });
-
-        if (existingSubscription) {
-            return res.status(400).json({ message: "Already subscribed to this creator" });
-        }
-
-        // Create subscription
-        const subscription = new Subscriptions({
-            subscriber: subscriberId,
-            creator: creatorId
-        });
-
-        await subscription.save();
+        // Upsert the subscription and set active
+        const subscription = await Subscriptions.findOneAndUpdate(
+            { subscriber: subscriberId, creator: creatorId },
+            { $set: { isActive: true } },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
 
         // Update user relationships
-        await Users.findByIdAndUpdate(subscriberId, {
-            $addToSet: { subscriptions: creatorId }
-        });
+        await Users.findByIdAndUpdate(subscriberId, { $addToSet: { subscriptions: creatorId } });
+        await Users.findByIdAndUpdate(creatorId, { $addToSet: { subscribers: subscriberId } });
 
-        await Users.findByIdAndUpdate(creatorId, {
-            $addToSet: { subscribers: subscriberId }
-        });
-
-        res.status(201).json({ 
-            message: "Successfully subscribed to creator",
-            subscription: subscription
-        });
+        return res.status(201).json({ message: "Successfully subscribed to creator", subscription });
     } catch (error) {
         console.error("Subscribe error:", error);
-        res.status(500).json({ message: "Server error", error: error.message });
+        // Duplicate key safety net
+        if (error?.code === 11000) {
+            return res.status(400).json({ message: "Already subscribed to this creator" });
+        }
+        return res.status(500).json({ message: "Server error", error: error.message });
     }
 });
 
@@ -78,16 +76,10 @@ router.delete("/unsubscribe/:creatorId", userAuth("user"), async (req, res) => {
         const subscriberId = req.user._id;
         const creatorId = req.params.creatorId;
 
-        // Find and deactivate subscription
+        // Deactivate (do not delete) the subscription to preserve unique pair
         const subscription = await Subscriptions.findOneAndUpdate(
-            {
-                subscriber: subscriberId,
-                creator: creatorId,
-                isActive: true
-            },
-            { 
-                isActive: false
-            },
+            { subscriber: subscriberId, creator: creatorId },
+            { $set: { isActive: false } },
             { new: true }
         );
 
@@ -96,20 +88,13 @@ router.delete("/unsubscribe/:creatorId", userAuth("user"), async (req, res) => {
         }
 
         // Update user relationships
-        await Users.findByIdAndUpdate(subscriberId, {
-            // $pull is a MongoDB update operator that removes a value from an array field.
-            // Here, it removes the creatorId from the user's subscriptions array.
-            $pull: { subscriptions: creatorId }
-        });
+        await Users.findByIdAndUpdate(subscriberId, { $pull: { subscriptions: creatorId } });
+        await Users.findByIdAndUpdate(creatorId, { $pull: { subscribers: subscriberId } });
 
-        await Users.findByIdAndUpdate(creatorId, {
-            $pull: { subscribers: subscriberId }
-        });
-
-        res.json({ message: "Successfully unsubscribed from creator" });
+        return res.json({ message: "Successfully unsubscribed from creator" });
     } catch (error) {
         console.error("Unsubscribe error:", error);
-        res.status(500).json({ message: "Server error", error: error.message });
+        return res.status(500).json({ message: "Server error", error: error.message });
     }
 });
 

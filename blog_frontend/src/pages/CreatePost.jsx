@@ -4,7 +4,7 @@ import { tryPost } from "../api/axios";
 import { useNavigate } from "react-router-dom";
 
 const paths = {
-  create: ["/api/user/post", "/api/posts", "/post"]
+  create: ["/api/user/post"]
 };
 
 export default function CreatePost() {

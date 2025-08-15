@@ -6,6 +6,7 @@ const paths = {
   dashboard: ["/api/admin/dashboard"],
   createContent: ["/api/admin/create-content"],
   verifyCreator: (id) => [`/api/admin/verify-creator/${id}`],
+  unverifyCreator: (id) => [`/api/admin/unverify-creator/${id}`],
   creators: ["/api/admin/creators", "/api/subscription/creators"],
 };
 
@@ -57,7 +58,13 @@ export default function AdminDashboard() {
           <div className="card" key={c._id}>
             <div className="title">{c.username}</div>
             <div className="muted">{String(c.isVerifiedCreator ? "Verified" : "Unverified")}</div>
-            <button className="btn" onClick={()=>tryPut(paths.verifyCreator(c._id), {}).then(load)}>
+            <button
+              className="btn"
+              onClick={()=>{
+                const p = c.isVerifiedCreator ? paths.unverifyCreator(c._id) : paths.verifyCreator(c._id);
+                return tryPut(p, {}).then(load);
+              }}
+            >
               {c.isVerifiedCreator? "Unverify":"Verify"}
             </button>
           </div>

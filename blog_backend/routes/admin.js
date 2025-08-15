@@ -122,6 +122,27 @@ router.get('/dashboard', userAuth("admin"), async (req, res) => {
 });
 
 // ---------------- Create admin content ----------------
+// Public: list admin-created content (used by frontend home feed)
+router.get('/create-content', async (req, res) => {
+    try {
+        // Find admin users
+        const admins = await Users.find({ role: 'admin' }).select('_id');
+        const adminIds = admins.map(u => u._id);
+
+        const posts = await Blogs.find({
+            isPublished: true,
+            author: { $in: adminIds }
+        })
+        .populate('author', 'username')
+        .sort({ createdAt: -1 });
+
+        return res.json({ posts });
+    } catch (error) {
+        console.error("List admin content error:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
 router.post('/create-content', userAuth("admin"), async (req, res) => {
     try {
         const { title, content, tags, isPublic } = req.body;
@@ -174,10 +195,39 @@ router.put('/verify-creator/:userId', userAuth("admin"), async (req, res) => {
     }
 });
 
+// ---------------- Unverify a creator ----------------
+router.put('/unverify-creator/:userId', userAuth("admin"), async (req, res) => {
+    try {
+        const user = await Users.findByIdAndUpdate(
+            req.params.userId,
+            { isVerifiedCreator: false },
+            { new: true }
+        ).select('-password');
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({ 
+            message: "Creator unverified successfully",
+            user: user
+        });
+    } catch (error) {
+        console.error("Unverify creator error:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
 // ---------------- Get all creators for admin ----------------
 router.get('/creators', userAuth("admin"), async (req, res) => {
     try {
-        const creators = await Users.find({ isActive: true })
+        const q = (req.query.search || '').trim();
+        const cond = { isActive: true };
+        if (q) {
+            const regex = new RegExp(q, 'i');
+            cond.$or = [{ username: regex }, { email: regex }];
+        }
+        const creators = await Users.find(cond)
             .select('username email creatorBio creatorCategory isVerifiedCreator subscribers since')
             .sort({ since: -1 });
 

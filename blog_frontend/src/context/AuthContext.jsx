@@ -7,9 +7,9 @@ const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
 
 const paths = {
-  signup: ["/api/user/signup", "/api/user/register", "/signup"],
-  login: ["/api/user/login", "/api/user/signin", "/login"],
-  me: (id) => [`/api/user/profile/${id}`, `/profile/${id}`],
+  signup: ["/api/user/signup"],
+  login: ["/api/user/login"],
+  me: (id) => [`/api/user/profile/${id}`],
 };
 
 export function AuthProvider({ children }) {

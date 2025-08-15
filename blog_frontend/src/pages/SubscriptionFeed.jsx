@@ -4,7 +4,7 @@ import { tryGet } from "../api/axios";
 import PostCard from "../components/PostCard";
 
 const paths = {
-  feed: ["/api/subscription/content", "/api/subscription/feed"],
+  feed: ["/api/subscription/content"],
 };
 
 export default function SubscriptionFeed(){
