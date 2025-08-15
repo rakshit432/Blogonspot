@@ -22,7 +22,7 @@ export default function SearchBar({ onResults, sourcePosts = [], sourceUsers = [
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+  }, [])
 
   async function doSearch(e) {
     e.preventDefault();
