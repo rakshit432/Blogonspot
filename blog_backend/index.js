@@ -160,8 +160,7 @@ if (!process.env.ADMIN_KEY) {
 }
 
 console.log("🔧 Starting server with configuration:");
-console.log(`   Port: ${PORT}`);
-console.log(`   MongoDB: ${MONGO_URI}`);
+
 console.log(`   JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`);
 console.log(`   Admin Key: ${process.env.ADMIN_KEY ? 'Set' : 'Not set'}`);
 
