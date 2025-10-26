@@ -90,6 +90,7 @@ router.get("/profile/:id", async (req, res) => {
     }
 });
 
+
 // ---------------- Edit Profile ----------------
 router.put("/edit/:id", userAuth("user"), async (req, res) => {
     try {

@@ -16,13 +16,17 @@ export default function Signup() {
     adminKey: ""
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function onSubmit(e) {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       await signup(form);
       nav("/login");
+    } catch (err) {
+      setError(err.message || "Signup failed. Please try again.");
     } finally { 
       setLoading(false); 
     }
@@ -52,6 +56,17 @@ export default function Signup() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
+          {error && (
+            <motion.div 
+              className="error-message"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {error}
+            </motion.div>
+          )}
+
           <div className="form-group">
             <div className="input-wrapper">
               <FiUser className="input-icon" />
@@ -61,6 +76,7 @@ export default function Signup() {
                 value={form.username}
                 onChange={(e) => setForm({...form, username: e.target.value})} 
                 required 
+                disabled={loading}
               />
             </div>
           </div>
@@ -75,6 +91,7 @@ export default function Signup() {
                 value={form.email}
                 onChange={(e) => setForm({...form, email: e.target.value})} 
                 required 
+                disabled={loading}
               />
             </div>
           </div>
@@ -89,6 +106,7 @@ export default function Signup() {
                 value={form.password}
                 onChange={(e) => setForm({...form, password: e.target.value})} 
                 required 
+                disabled={loading}
               />
             </div>
           </div>
@@ -96,13 +114,14 @@ export default function Signup() {
           <div className="form-group">
             <div className="role-selector">
               <label className="role-label">
-                <input
-                  type="radio"
-                  name="role"
-                  value="user"
-                  checked={form.role === "user"}
-                  onChange={(e) => setForm({...form, role: e.target.value})}
-                />
+                  <input
+                    type="radio"
+                    name="role"
+                    value="user"
+                    checked={form.role === "user"}
+                    onChange={(e) => setForm({...form, role: e.target.value})}
+                    disabled={loading}
+                  />
                 <span className="role-option">User</span>
               </label>
               <label className="role-label">
@@ -112,6 +131,7 @@ export default function Signup() {
                   value="admin"
                   checked={form.role === "admin"}
                   onChange={(e) => setForm({...form, role: e.target.value})}
+                  disabled={loading}
                 />
                 <span className="role-option">Admin</span>
               </label>
@@ -128,14 +148,15 @@ export default function Signup() {
             >
               <div className="input-wrapper">
                 <FiShield className="input-icon" />
-                <input 
-                  className="auth-input" 
-                  placeholder="Admin Key" 
-                  type="password" 
-                  value={form.adminKey}
-                  onChange={(e) => setForm({...form, adminKey: e.target.value})} 
-                  required={form.role === "admin"}
-                />
+                  <input 
+                    className="auth-input" 
+                    placeholder="Admin Key" 
+                    type="password" 
+                    value={form.adminKey}
+                    onChange={(e) => setForm({...form, adminKey: e.target.value})} 
+                    required={form.role === "admin"}
+                    disabled={loading}
+                  />
               </div>
             </motion.div>
           )}
@@ -143,8 +164,8 @@ export default function Signup() {
           <motion.button 
             className="auth-button" 
             disabled={loading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: loading ? 1 : 1.02 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
           >
             {loading ? "Creating account..." : "Create account"}
           </motion.button>

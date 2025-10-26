@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import PostCard from "../components/PostCard";
 import SearchBar from "../components/SearchBar";
+import Onboarding from "../components/Onboarding";
 import { tryGet, tryPost, tryDel } from "../api/axios";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -31,6 +32,7 @@ export default function Home() {
   const nav = useNavigate();
   const [posts, setPosts] = useState([]);
   const [search, setSearch] = useState({ posts: [], users: [] });
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   async function load() {
     const [pubRes, subRes, adminRes] = await Promise.all([
@@ -46,7 +48,13 @@ export default function Home() {
     setPosts(list);
   }
 
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { 
+    load(); 
+    // Show onboarding for new users
+    if (user && !localStorage.getItem('onboarding_completed')) {
+      setShowOnboarding(true);
+    }
+  }, [user]);
 
   async function onLike(p, likedByMe) {
     // Optimistic update for main feed
@@ -121,6 +129,11 @@ export default function Home() {
     }
   }
 
+  const handleOnboardingClose = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('onboarding_completed', 'true');
+  };
+
   return (
     <div className="container">
       <SearchBar onResults={setSearch} sourcePosts={posts} />
@@ -141,6 +154,8 @@ export default function Home() {
           <PostCard key={p._id} post={p} onOpen={() => nav(`/post/${p._id}`)} onLike={onLike} onBookmark={onBookmark} currentUserId={userId} />
         ))}
       </div>
+
+      <Onboarding isOpen={showOnboarding} onClose={handleOnboardingClose} />
     </div>
   );
 }

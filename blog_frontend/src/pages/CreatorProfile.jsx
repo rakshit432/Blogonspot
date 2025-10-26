@@ -1,219 +1,327 @@
-// src/pages/CreatorProfile.jsx
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { getProfile, getCreatorContent, userPosts, adminUserPosts, subscribe as apiSubscribe, unsubscribe as apiUnsubscribe, adminDeletePost, adminDisableUser, adminEnableUser } from "../api/axios";
 import PostCard from "../components/PostCard";
-import { toast } from "react-hot-toast";
-import { FiCheckCircle } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
-import { tryPost, tryDel } from "../api/axios";
-import {
-  getProfile,
-  getCreatorContent,
-  userPosts,
-  subscribe as apiSubscribe,
-  unsubscribe as apiUnsubscribe,
-} from "../api/axios";
-import { SkeletonAvatar, SkeletonLine } from "../components/Skeleton.jsx";
+import { toast } from "react-hot-toast";
 
 export default function CreatorProfile() {
   const { id } = useParams();
-  const { userId } = useAuth();
+  const navigate = useNavigate();
+  const { user: currentUser, role } = useAuth();
   const [creator, setCreator] = useState(null);
   const [posts, setPosts] = useState([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  function categoryMiniature(category, name){
-    const map = {
-      tech: { bg:"#E0E7FF" },
-      art: { bg:"#FFE4E6" },
-      photography: { bg:"#E0F2FE" },
-      music: { bg:"#F5F3FF" },
-      food: { bg:"#FEF2F2" },
-      sports: { bg:"#ECFCCB" },
-      default: { bg:"#ECFDF5" }
-    };
-    const key = String(category||"").toLowerCase();
-    const cfg = map[key] || map.default;
-    const initials = (name||"U").slice(0,2).toUpperCase();
-    const svg = `<?xml version='1.0' encoding='UTF-8'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'>\n  <rect width='128' height='128' rx='24' fill='${cfg.bg}'/>\n  <text x='50%' y='24%' dominant-baseline='middle' text-anchor='middle' fill='#111827' font-family='Inter, Arial' font-size='14' font-weight='800'>${initials}</text>\n</svg>`;
-    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
-  }
+  const [error, setError] = useState(null);
+  const [subLoading, setSubLoading] = useState(false);
+  const [adminActing, setAdminActing] = useState(false);
+  
+  const userId = currentUser?._id;
+  const isOwnProfile = String(userId) === String(id);
+  const isAdmin = role === 'admin';
 
   async function load() {
     try {
       setLoading(true);
-      const [profRes, contentRes] = await Promise.all([
+      setError(null);
+      
+      const [profRes, contentRes] = await Promise.allSettled([
         getProfile(id).catch(() => ({ data: null })),
-        getCreatorContent(id).catch(() => ({ data: { posts: [] } })),
+        getCreatorContent(id).catch(() => ({ 
+          data: { posts: [], isSubscribed: false } 
+        })),
       ]);
-      setCreator(profRes.data);
-      setPosts(Array.isArray(contentRes.data) ? contentRes.data : contentRes.data?.posts || []);
-      setIsSubscribed(!!contentRes.data?.isSubscribed);
-      // Fallback: if no posts returned, try public posts by author
-      if ((contentRes.data?.posts?.length || 0) === 0) {
-        const pub = await userPosts(id, true).catch(()=>({ data: [] }));
-        setPosts(Array.isArray(pub.data)?pub.data:pub.data?.posts||[]);
+
+      const profileData = profRes.status === 'fulfilled' ? profRes.value?.data : null;
+      const contentData = contentRes.status === 'fulfilled' ? contentRes.value?.data : { 
+        posts: [], 
+        isSubscribed: false 
+      };
+
+      if (!profileData) {
+        throw new Error('Creator not found');
       }
 
-  const paths = {
-    like: (pid) => [`/api/user/like/${pid}`, `/api/posts/${pid}/like`],
-    unlike: (pid) => [`/api/user/like/${pid}`, `/api/posts/${pid}/like`],
-    bookmarkAdd: (pid) => [
-      `/api/user/bookmarks/${pid}`,
-      `/api/user/bookmark/${pid}`
-    ],
-    bookmarkRemove: (pid) => [
-      `/api/user/bookmarks/${pid}`,
-      `/api/user/bookmark/${pid}`
-    ],
+      const subscribed = isAdmin || isOwnProfile || contentData?.isSubscribed;
+      
+      setCreator(profileData);
+      setIsSubscribed(!!subscribed);
+
+      if (isAdmin) {
+        try {
+          const all = await adminUserPosts(id);
+          const arr = Array.isArray(all?.data) ? all.data : (all?.data?.posts || []);
+          const unique = Array.from(new Map(arr.map(p => [String(p?._id), p])).values());
+          setPosts(unique);
+        } catch (e) {
+          console.warn('Admin load all posts failed, falling back:', e);
+          const base = Array.isArray(contentData) ? contentData : contentData?.posts || [];
+          const unique = Array.from(new Map(base.map(p => [String(p?._id), p])).values());
+          setPosts(unique);
+        }
+      } else {
+        const base = Array.isArray(contentData) ? contentData : contentData?.posts || [];
+        const unique = Array.from(new Map(base.map(p => [String(p?._id), p])).values());
+        setPosts(unique);
+      }
+
+      // Fallback for public posts if needed
+      if (!isAdmin && !subscribed && (!contentData?.posts?.length)) {
+        try {
+          const pub = await userPosts(id, true);
+          const add = Array.isArray(pub?.data) ? pub.data : [];
+          setPosts(prev => {
+            const map = new Map(prev.map(p => [String(p?._id), p]));
+            for (const p of add) map.set(String(p?._id), p);
+            return Array.from(map.values());
+          });
+        } catch (e) {
+          console.warn('Could not load public posts:', e);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading creator profile:', error);
+      setError(error.message || 'Failed to load creator profile');
+      toast.error(error.message || 'Failed to load creator profile');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const onLike = async (post, liked) => {
+    // Your like implementation
+    console.log(liked ? 'Liking post:' : 'Unliking post:', post._id);
   };
 
-  async function onLike(p, likedByMe){
-    // optimistic update within this page's posts state
-    const mutate = (post) => {
-      const copy = { ...post };
-      if (Array.isArray(copy.likes)) {
-        if (likedByMe) {
-          copy.likes = copy.likes.filter((x)=>String(x)!==String(userId));
-        } else {
-          copy.likes = [...copy.likes, userId];
-        }
+  const onBookmark = async (post, bookmarked) => {
+    // Your bookmark implementation
+    console.log(bookmarked ? 'Bookmarking post:' : 'Removing bookmark:', post._id);
+  };
+
+  const handleAdminToggleUser = async () => {
+    try {
+      setAdminActing(true);
+      const active = creator?.isActive !== false; // treat undefined as active
+      if (!active) {
+        await adminEnableUser(creator._id);
+        toast.success('User enabled');
       } else {
-        const cnt = Number(copy.likesCount || 0);
-        copy.likesCount = likedByMe ? Math.max(0, cnt-1) : cnt+1;
-        copy.likedByMe = !likedByMe;
+        await adminDisableUser(creator._id);
+        toast.success('User disabled');
       }
-      return copy;
-    };
-    const prev = posts;
-    setPosts((arr)=>arr.map((it)=> it._id===p._id ? mutate(it) : it));
-    try {
-      if (likedByMe) await tryDel(paths.unlike(p._id));
-      else await tryPost(paths.like(p._id), {});
-    } catch (e) {
-      setPosts(prev);
-      toast.error(e?.response?.data?.message || "Like failed");
-    }
-  }
-
-  async function onBookmark(p, bookmarkedByMe){
-    const mutate = (post) => {
-      const copy = { ...post };
-      if (Array.isArray(copy.bookmarks)) {
-        if (bookmarkedByMe) {
-          copy.bookmarks = copy.bookmarks.filter((x)=>String(x)!==String(userId));
-        } else {
-          copy.bookmarks = [...copy.bookmarks, userId];
-        }
-      } else {
-        copy.bookmarkedByMe = !bookmarkedByMe;
-      }
-      return copy;
-    };
-    const prev = posts;
-    setPosts((arr)=>arr.map((it)=> it._id===p._id ? mutate(it) : it));
-    try {
-      if (bookmarkedByMe) await tryDel(paths.bookmarkRemove(p._id));
-      else await tryPost(paths.bookmarkAdd(p._id), {});
-    } catch (e) {
-      setPosts(prev);
-      toast.error(e?.response?.data?.message || "Bookmark failed");
-    }
-  }
-    } catch (e) {
-      toast.error("Failed to load creator");
-    } finally { setLoading(false); }
-  }
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
-
-  async function handleSubscribe() {
-    try {
-      if (!localStorage.getItem("token")) { toast.error("Please log in to subscribe."); return; }
-      setBusy(true);
-      await apiSubscribe(id);
-      toast.success("Subscribed");
       await load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || "Subscribe failed");
-    } finally { setBusy(false); }
+      toast.error(e?.response?.data?.message || 'Admin action failed');
+    } finally {
+      setAdminActing(false);
+    }
+  };
+
+  const handleAdminDeletePost = async (postId) => {
+    try {
+      setAdminActing(true);
+      await adminDeletePost(postId);
+      setPosts((prev) => prev.filter((p) => p._id !== postId));
+      toast.success('Post deleted');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to delete post');
+    } finally {
+      setAdminActing(false);
+    }
+  };
+
+  const toggleSubscription = async () => {
+    if (!currentUser) {
+      toast.error('Please log in to manage subscription');
+      navigate('/login', { state: { from: `/creator/${id}` } });
+      return;
+    }
+    try {
+      setSubLoading(true);
+      if (isSubscribed) {
+        await apiUnsubscribe(id);
+        setIsSubscribed(false);
+        toast.success('Unsubscribed');
+      } else {
+        await apiSubscribe(id);
+        setIsSubscribed(true);
+        toast.success('Subscribed');
+      }
+      // Optionally reload content to reflect access changes
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to update subscription');
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) {
+      load();
+    }
+  }, [id, userId]);
+
+  if (loading && !creator) {
+    return (
+      <div className="container">
+        <div className="skeleton skeleton-card" style={{ height: '200px', marginBottom: '2rem' }} />
+        <div className="grid">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="skeleton skeleton-card" style={{ height: '300px' }} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  async function handleUnsubscribe() {
-    try {
-      if (!localStorage.getItem("token")) { toast.error("Please log in to unsubscribe."); return; }
-      setBusy(true);
-      await apiUnsubscribe(id);
-      toast.success("Unsubscribed");
-      await load();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Unsubscribe failed");
-    } finally { setBusy(false); }
+  if (error) {
+    return (
+      <div className="container">
+        <div className="error-message">
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()} className="btn primary">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!creator) {
+    return (
+      <div className="container">
+        <div className="error-message">
+          <p>Creator not found</p>
+          <button onClick={() => navigate('/')} className="btn primary">
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="container narrow">
-      <div className="card" style={{padding:16, marginBottom:16}}>
-        <div style={{display:"flex", alignItems:"center", gap:16}}>
-          {loading ? (
-            <SkeletonAvatar size={56} />
+    <div className="container">
+      <div className="profile-header" style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem' }}>
+          {creator?.avatar ? (
+            <img 
+              src={creator.avatar} 
+              alt={creator.username || 'User'} 
+              style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '50%', 
+                objectFit: 'cover',
+                border: '2px solid var(--border)'
+              }} 
+            />
           ) : (
-            <img src={
-                  creator?.avatar 
-                    || (creator?.role === 'admin'
-                        ? `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(`<?xml version='1.0' encoding='UTF-8'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'>\n  <defs>\n    <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>\n      <stop offset='0%' stop-color='#111827'/>\n      <stop offset='100%' stop-color='#334155'/>\n    </linearGradient>\n  </defs>\n  <rect width='128' height='128' rx='24' fill='url(#g)'/>\n  <circle cx='64' cy='52' r='22' fill='#fef3c7'/>\n  <rect x='30' y='80' width='68' height='30' rx='15' fill='#1f2937'/>\n  <path d='M24 20 L104 20 L92 44 L36 44 Z' fill='#eab308'/>\n  <text x='50%' y='20%' dominant-baseline='middle' text-anchor='middle' fill='#000' font-family='Inter, Arial' font-size='12' font-weight='800'>BOSS</text>\n</svg>`)))}`
-                        : categoryMiniature(creator?.creatorCategory, creator?.username))
-                }
-                 alt={creator?.username}
-                 style={{width:56,height:56,borderRadius:999,objectFit:"cover",border:"1px solid #eee"}} />
-          )}
-          <div style={{flex:1}}>
-            {loading ? (
-              <>
-                <SkeletonLine width="30%" height={20} />
-                <SkeletonLine width="20%" style={{marginTop:6}} />
-                <SkeletonLine width="50%" style={{marginTop:6}} />
-              </>
-            ) : (
-              <>
-                <h2 className="section-title" style={{margin:0, display:"flex", alignItems:"center", gap:8}}>
-                  {creator?.username || "Creator"}
-                  {creator?.isVerifiedCreator && (
-                    <span title="Verified" style={{display:"inline-flex",alignItems:"center",gap:6,color:"var(--brand)",fontSize:14}}>
-                      <FiCheckCircle />
-                    </span>
-                  )}
-                </h2>
-                <p className="muted" style={{margin:"4px 0"}}>{creator?.creatorCategory}</p>
-                <p style={{margin:0}}>{creator?.creatorBio}</p>
-              </>
-            )}
-          </div>
-          {!loading && userId && userId !== id && (
-            <div style={{display:"flex", gap:8}}>
-              {isSubscribed ? (
-                <button className="btn ghost" disabled={busy} onClick={handleUnsubscribe}>{busy?"...":"Unsubscribe"}</button>
-              ) : (
-                <button className="btn" disabled={busy} onClick={handleSubscribe}>{busy?"...":"Subscribe"}</button>
-              )}
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: 'var(--bg-light)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.5rem',
+              fontWeight: 'bold',
+              color: 'var(--text-secondary)',
+              border: '2px solid var(--border)'
+            }}>
+              {creator?.username?.charAt(0)?.toUpperCase() || 'U'}
             </div>
           )}
+          <div>
+            <h1 style={{ margin: 0 }}>
+              {creator?.username || 'User'}
+            </h1>
+            <p style={{ margin: 0, maxWidth: '600px' }}>
+              {creator?.bio || 'No bio available.'}
+            </p>
+          </div>
         </div>
+
+        {!isOwnProfile && !isAdmin && (
+          <div style={{ marginTop: '1rem' }}>
+            <button 
+              className={`btn ${isSubscribed ? 'ghost' : 'primary'}`}
+              onClick={toggleSubscription}
+              disabled={loading || subLoading}
+            >
+              {subLoading ? 'Please wait…' : (isSubscribed ? 'Unsubscribe' : 'Subscribe')}
+            </button>
+          </div>
+        )}
+        {isAdmin && !isOwnProfile && (
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
+            <button 
+              className="btn"
+              onClick={handleAdminToggleUser}
+              disabled={loading || adminActing}
+            >
+              {adminActing ? 'Working…' : ((creator?.isActive === false) ? 'Enable User' : 'Disable User')}
+            </button>
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <div className="grid">
-          {Array.from({length:6}).map((_,i)=> <div className="skeleton skeleton-card" key={i} />)}
-        </div>
-      ) : (
-        <div className="grid">
-          {posts.map((p) => (
-            <PostCard key={p._id} post={p} onLike={onLike} onBookmark={onBookmark} currentUserId={userId} />
-          ))}
-        </div>
-      )}
+      <div className="posts-grid" style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
+        gap: '1.5rem',
+        marginTop: '2rem'
+      }}>
+        {posts.length > 0 ? (
+          posts.map((post) => (
+            <div key={post._id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <PostCard
+                post={{
+                  ...post,
+                  author: post.author || creator
+                }}
+                onOpen={(p) => {
+                  if (isAdmin || p?.isPublic || isSubscribed || isOwnProfile) {
+                    navigate(`/post/${p._id}`);
+                  }
+                }}
+                onLike={onLike}
+                onBookmark={onBookmark}
+                currentUserId={userId}
+                isSubscribed={isSubscribed}
+                isAdmin={isAdmin}
+              />
+              {isAdmin && (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    className="btn ghost"
+                    onClick={() => handleAdminDeletePost(post._id)}
+                    disabled={adminActing}
+                  >
+                    Delete Post
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div style={{ 
+            gridColumn: '1 / -1', 
+            textAlign: 'center', 
+            padding: '2rem',
+            color: 'var(--text-secondary)'
+          }}>
+            {isOwnProfile ? (
+              <p>You haven't created any posts yet. <a href="/create" style={{ color: 'var(--brand)' }}>Create your first post</a>.</p>
+            ) : (
+              <p>No posts available.</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

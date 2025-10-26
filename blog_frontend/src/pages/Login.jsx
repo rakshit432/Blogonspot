@@ -10,13 +10,17 @@ export default function Login() {
   const nav = useNavigate();
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function onSubmit(e) {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       await login(form);
       nav("/");
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
     } finally { 
       setLoading(false); 
     }
@@ -46,6 +50,17 @@ export default function Login() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
+          {error && (
+            <motion.div 
+              className="error-message"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {error}
+            </motion.div>
+          )}
+
           <div className="form-group">
             <div className="input-wrapper">
               <FiMail className="input-icon" />
@@ -56,6 +71,7 @@ export default function Login() {
                 value={form.email} 
                 onChange={(e) => setForm({...form, email: e.target.value})} 
                 required 
+                disabled={loading}
               />
             </div>
           </div>
@@ -70,6 +86,7 @@ export default function Login() {
                 value={form.password} 
                 onChange={(e) => setForm({...form, password: e.target.value})} 
                 required 
+                disabled={loading}
               />
             </div>
           </div>
@@ -77,8 +94,8 @@ export default function Login() {
           <motion.button 
             className="auth-button" 
             disabled={loading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: loading ? 1 : 1.02 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
           >
             {loading ? "Signing in..." : "Sign in"}
           </motion.button>

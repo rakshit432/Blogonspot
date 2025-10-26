@@ -238,4 +238,18 @@ router.get('/creators', userAuth("admin"), async (req, res) => {
     }
 });
 
+// ---------------- Get all posts by user (admin only) ----------------
+router.get('/users/:id/posts', userAuth("admin"), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const posts = await Blogs.find({ author: id })
+            .populate('author', 'username avatar')
+            .sort({ createdAt: -1 });
+        return res.json(posts);
+    } catch (error) {
+        console.error("Admin get user posts error:", error);
+        return res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+
 module.exports = router;
