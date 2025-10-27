@@ -36,7 +36,7 @@ BlogOnSpot is packed with features that empower both creators and consumers:
     *   **Onboarding Tour**: A beautiful, multi-step onboarding modal guides new users through the platform's main features.
     *   **Dynamic Avatars**: Uniquely generated SVG avatars for users based on their category and username.
 
-*   ** rich User Interactions**:
+*   **Rich User Interactions**:
     *   **Like & Bookmark**: Users can like and save posts for later. The UI provides instant feedback.
     *   **Commenting System**: Engage with creators and other readers through a built-in commenting system on each post.
 
